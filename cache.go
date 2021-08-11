@@ -49,12 +49,8 @@ func NewTransparentCache(actualPriceService PriceService, maxAge time.Duration) 
 func (c *TransparentCache) GetPriceFor(itemCode string) (float64, error) {
 	item, ok := c.prices[itemCode]
 
-	if ok {
-		if !item.IsExpired() {
-			return item.Price, nil
-		}
-		log.Printf("item [ %v ] expired in cache and will be removed", itemCode)
-		delete(c.prices, itemCode) // removing from cache when expired. Not sure if it is necessary.
+	if ok && !item.IsExpired() {
+		return item.Price, nil
 	}
 
 	log.Printf("fetching item [ %v ] price from external service", itemCode)
@@ -78,7 +74,11 @@ func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) 
 
 	var results []float64
 
-	var ch = make(chan float64)
+	var ch = make(chan struct {
+		string
+		float64
+	})
+
 	var errCh = make(chan error)
 
 	defer close(ch)
@@ -86,14 +86,31 @@ func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) 
 
 	for _, itemCode := range itemCodes {
 		go func(code string) {
-			price, err := c.GetPriceFor(code)
+
+			item, ok := c.prices[code]
+
+			if ok && !item.IsExpired() {
+				ch <- struct {
+					string
+					float64
+				}{code, item.Price}
+				return
+			}
+
+			log.Printf("fetching item [ %v ] price from external service", code)
+			price, err := c.actualPriceService.GetPriceFor(code)
 
 			if err != nil {
-				log.Printf("failed to retrieve price of item [ %v ] for external service", code)
 				errCh <- err
 			}
-			ch <- price
+
+			ch <- struct {
+				string
+				float64
+			}{code, price}
+
 		}(itemCode)
+
 	}
 
 	for {
@@ -101,8 +118,18 @@ func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) 
 		case err := <-errCh:
 			log.Printf("operation cancelled due error %v", err)
 			return nil, err
-		case price := <-ch:
+		case result := <-ch:
+
+			code := result.string
+			price := result.float64
+
 			results = append(results, price)
+
+			c.prices[code] = ItemPriceCache{
+				Price:      price,
+				Expiration: planExpiration(c.maxAge),
+			}
+
 			if len(results) == len(itemCodes) {
 				return results, nil
 			}
