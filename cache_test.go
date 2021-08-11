@@ -170,3 +170,18 @@ func TestGetPricesFor_ParallelizeCalls(t *testing.T) {
 		t.Error("calls took too long, expected them to take a bit over one second")
 	}
 }
+
+// Check if even if I fail in the second operation, the hole operation should fail
+func TestGetPricesFor_ErrorOnSecondCallShouldFailOperation(t *testing.T) {
+	mockService := &mockPriceService{
+		mockResults: map[string]mockResult{
+			"p1": {price: 5, err: nil},
+			"p2": {price: 0, err: fmt.Errorf("some error")},
+		},
+	}
+	cache := NewTransparentCache(mockService, time.Minute)
+	_, err := cache.GetPricesFor("p1", "p2")
+	if err == nil {
+		t.Errorf("expected error, got nil")
+	}
+}

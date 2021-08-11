@@ -78,10 +78,7 @@ func (c *TransparentCache) GetPriceFor(itemCode string) (float64, error) {
 // If any of the operations returns an error, it should return an error as well
 func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) {
 
-	var results []float64
-
 	var ch = make(chan ItemPrice)
-
 	var errCh = make(chan error)
 
 	defer close(ch)
@@ -109,6 +106,8 @@ func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) 
 		}(itemCode)
 
 	}
+
+	var results []float64
 
 	for {
 		select {
