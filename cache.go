@@ -27,14 +27,20 @@ type ItemPriceCache struct {
 	Expiration int64
 }
 
+// ItemPrice is a temporary holders that contains the code and price of an item
+type ItemPrice struct {
+	code  string
+	price float64
+}
+
 // return true when expired.
 func (item *ItemPriceCache) IsExpired() bool {
 	return time.Now().UnixNano() > item.Expiration
 }
 
-//planExpiration return when an item will be expired.
-func planExpiration(duration time.Duration) int64 {
-	return time.Now().Add(duration).UnixNano()
+//getExpiration return when an item will be expired.
+func (c *TransparentCache) getExpiration() int64 {
+	return time.Now().Add(c.maxAge).UnixNano()
 }
 
 func NewTransparentCache(actualPriceService PriceService, maxAge time.Duration) *TransparentCache {
@@ -62,7 +68,7 @@ func (c *TransparentCache) GetPriceFor(itemCode string) (float64, error) {
 
 	c.prices[itemCode] = ItemPriceCache{
 		Price:      price,
-		Expiration: planExpiration(c.maxAge),
+		Expiration: c.getExpiration(),
 	}
 
 	return price, nil
@@ -74,10 +80,7 @@ func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) 
 
 	var results []float64
 
-	var ch = make(chan struct {
-		string
-		float64
-	})
+	var ch = make(chan ItemPrice)
 
 	var errCh = make(chan error)
 
@@ -90,10 +93,7 @@ func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) 
 			item, ok := c.prices[code]
 
 			if ok && !item.IsExpired() {
-				ch <- struct {
-					string
-					float64
-				}{code, item.Price}
+				ch <- ItemPrice{code, item.Price}
 				return
 			}
 
@@ -104,10 +104,7 @@ func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) 
 				errCh <- err
 			}
 
-			ch <- struct {
-				string
-				float64
-			}{code, price}
+			ch <- ItemPrice{code, price}
 
 		}(itemCode)
 
@@ -120,14 +117,14 @@ func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) 
 			return nil, err
 		case result := <-ch:
 
-			code := result.string
-			price := result.float64
+			code := result.code
+			price := result.price
 
 			results = append(results, price)
 
 			c.prices[code] = ItemPriceCache{
 				Price:      price,
-				Expiration: planExpiration(c.maxAge),
+				Expiration: c.getExpiration(),
 			}
 
 			if len(results) == len(itemCodes) {
