@@ -11,3 +11,8 @@ In order to make calls in concurrently, I decided to use a goroutine. Im not sur
 Due to concurrently approach for the GetPricesFor, I faced some issues writing cache into map. In order to avoid using a mutex, I decided to:
 
     - Duplicate the "get in the external system and persist to cache" approach.
+
+# Pending items
+
+I was planning to create chunks for the operation <b>GetPricesFor</b> in order to limit parallel calls to do not take the external system down.
+I was not sure if it is a requirement. 
