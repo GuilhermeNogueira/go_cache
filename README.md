@@ -2,7 +2,7 @@
 
 - IsExpired:
 
-I decided to move with a very simple idea. Nothing special, just added a certain duration into the 
+I decided to move with a very simple idea. Nothing special, just added a certain duration into the current time. 
 
 -  GetPricesFor
 
